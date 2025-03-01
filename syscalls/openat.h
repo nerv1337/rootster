@@ -7,4 +7,4 @@
 extern asmlinkage long (*real_sys_openat)(struct pt_regs *regs);
 extern asmlinkage long openat_hook(struct pt_regs *regs);
 
-#endif // FOO_H_
+#endif // OPENAT_H_

