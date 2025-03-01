@@ -1,5 +1,19 @@
-obj-m = rootster.o
+# Define the module name
+obj-m += rootsterr.o
+
+EXTRA_CFLAGS=-I$(PWD)/syscalls
+# List all object files that make up the module
+rootsterr-objs := syscalls/openat.o rootster.o
+
+# Kernel build directory
+KDIR := /lib/modules/$(shell uname -r)/build
+
+# Current directory
+PWD := $(shell pwd)
+
 all:
-	make -C /lib/modules/$(shell uname -r)/build/ M=$(PWD) modules
+	$(MAKE) -C $(KDIR) M=$(PWD) $(MAKE_OPTS) modules
+
 clean:
-	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
+	$(MAKE) -C $(KDIR) M=$(PWD) $(MAKE_OPTS) clean
+

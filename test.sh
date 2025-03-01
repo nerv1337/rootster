@@ -7,11 +7,11 @@ sudo apt install build-essential linux-headers-$(uname -r) -y
 make clean ; make 
 
 # Insert kernel module
-sudo insmod rootster.ko
+sudo modprobe ./rootster.ko
 
 sudo dmesg
 
-ls
+#ls
 
-sudo rmmod rootster.ko
+sudo rmmod ./rootster.ko
 
